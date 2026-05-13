@@ -23,7 +23,7 @@ jobs:
       - name: Run Update Script
         env:
           ACCESS_TOKEN: ${{ secrets.METRICS_TOKEN }}
-          USER_NAME: ${{ github.repository_owner }}
+          USER_NAME: ${{ vars.USER_NAME }}
         run: python today.py
 
       - name: Commit and Push changes
