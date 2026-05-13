@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v3
@@ -22,7 +25,7 @@ jobs:
 
       - name: Run Update Script
         env:
-          ACCESS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
           USER_NAME: ${{ vars.USER_NAME }}
         run: python today.py
 
@@ -30,6 +33,10 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
+          # This ensures the cache folder and SVGs are all tracked
+          git add dark_mode.svg light_mode.svg
+          # Only add cache if it exists to avoid errors
+          if [ -d "cache" ]; then git add cache/; fi
+          
           git commit -m "Updated stats and uptime" || exit 0
           git push
