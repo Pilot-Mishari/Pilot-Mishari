@@ -14,33 +14,6 @@ HEADERS = {'authorization': 'token ' + os.environ['ACCESS_TOKEN']}
 USER_NAME = os.environ['USER_NAME']  # 'Andrew6rant'
 QUERY_COUNT = {'user_getter': 0, 'follower_getter': 0, 'graph_repos_stars': 0, 'recursive_loc': 0, 'graph_commits': 0, 'loc_query': 0}
 
-    variables = {'owner_affiliation': owner_affiliation, 'login': USER_NAME, 'cursor': cursor}
-
-    max_retries = 3
-    for attempt in range(1, max_retries + 1):
-        request = simple_request(loc_query.__name__, query, variables)
-        response = request.json()
-        if response.get('data') and response['data'].get('user'):
-            break
-        # data.user came back null - GitHub returned 200 but the query itself
-        # failed (timeout / secondary rate limit / etc). Back off and retry.
-        print(f'loc_query attempt {attempt} got a null user. Errors: {response.get("errors")}')
-        if attempt == max_retries:
-            raise Exception('loc_query() kept getting a null user after retries:', response.get('errors'))
-        time.sleep(5 * attempt)
-
-    # FIX: filter out null nodes before they get used anywhere. GitHub
-    # returns node: null for repos this token can't see the details of
-    # (unapproved org SSO, deleted/transferred/private repo, etc). The
-    # unfiltered list was what crashed flush_cache() with a TypeError.
-    new_edges = [e for e in response['data']['user']['repositories']['edges'] if e['node'] is not None]
-
-    if response['data']['user']['repositories']['pageInfo']['hasNextPage']:  # If repository data has another page
-        edges += new_edges  # Add on to the LoC count
-        return loc_query(owner_affiliation, comment_size, force_cache, response['data']['user']['repositories']['pageInfo']['endCursor'], edges)
-    else:
-        return cache_builder(edges + new_edges, comment_size, force_cache)
-
 
 def daily_readme(birthday):
     """
@@ -241,17 +214,30 @@ def loc_query(owner_affiliation, comment_size=0, force_cache=False, cursor=None,
         }
     }'''
     variables = {'owner_affiliation': owner_affiliation, 'login': USER_NAME, 'cursor': cursor}
-    request = simple_request(loc_query.__name__, query, variables)
+
+    max_retries = 3
+    response = None
+    for attempt in range(1, max_retries + 1):
+        request = simple_request(loc_query.__name__, query, variables)
+        response = request.json()
+        if response.get('data') and response['data'].get('user'):
+            break
+        # data.user came back null - GitHub returned 200 but the query itself
+        # failed (timeout / secondary rate limit / etc). Back off and retry.
+        print(f'loc_query attempt {attempt} got a null user. Errors: {response.get("errors")}')
+        if attempt == max_retries:
+            raise Exception('loc_query() kept getting a null user after retries:', response.get('errors'))
+        time.sleep(5 * attempt)
 
     # FIX: filter out null nodes before they get used anywhere. GitHub
     # returns node: null for repos this token can't see the details of
     # (unapproved org SSO, deleted/transferred/private repo, etc). The
     # unfiltered list was what crashed flush_cache() with a TypeError.
-    new_edges = [e for e in request.json()['data']['user']['repositories']['edges'] if e['node'] is not None]
+    new_edges = [e for e in response['data']['user']['repositories']['edges'] if e['node'] is not None]
 
-    if request.json()['data']['user']['repositories']['pageInfo']['hasNextPage']:  # If repository data has another page
+    if response['data']['user']['repositories']['pageInfo']['hasNextPage']:  # If repository data has another page
         edges += new_edges  # Add on to the LoC count
-        return loc_query(owner_affiliation, comment_size, force_cache, request.json()['data']['user']['repositories']['pageInfo']['endCursor'], edges)
+        return loc_query(owner_affiliation, comment_size, force_cache, response['data']['user']['repositories']['pageInfo']['endCursor'], edges)
     else:
         return cache_builder(edges + new_edges, comment_size, force_cache)
 
